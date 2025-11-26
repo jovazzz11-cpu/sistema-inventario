@@ -20,25 +20,40 @@ let CATEGORIAS = [
 // ===================================
 document.addEventListener('DOMContentLoaded', () => {
     cargarDatos();
-    inicializarEventos();
     cargarProductosDemo();
     actualizarDashboard();
     renderizarProductos();
     actualizarFiltrosCategorias();
+    
+    // Retrasar inicialización de eventos para asegurar que DOM esté completamente listo
+    setTimeout(() => {
+        inicializarEventos();
+    }, 100);
 });
 
 // ===================================
 // GESTIÓN DE DATOS
 // ===================================
 function cargarDatos() {
-    const datosGuardados = localStorage.getItem('inventario_productos');
-    if (datosGuardados) {
-        productos = JSON.parse(datosGuardados);
+    try {
+        const datosGuardados = localStorage.getItem('inventario_productos');
+        if (datosGuardados) {
+            productos = JSON.parse(datosGuardados);
+        }
+    } catch (error) {
+        console.error('Error al cargar productos:', error);
+        productos = [];
+        localStorage.removeItem('inventario_productos');
     }
     
-    const categoriasGuardadas = localStorage.getItem('inventario_categorias');
-    if (categoriasGuardadas) {
-        CATEGORIAS = JSON.parse(categoriasGuardadas);
+    try {
+        const categoriasGuardadas = localStorage.getItem('inventario_categorias');
+        if (categoriasGuardadas) {
+            CATEGORIAS = JSON.parse(categoriasGuardadas);
+        }
+    } catch (error) {
+        console.error('Error al cargar categorías:', error);
+        localStorage.removeItem('inventario_categorias');
     }
     
     const temaGuardado = localStorage.getItem('inventario_tema');
@@ -284,9 +299,20 @@ function inicializarEventos() {
     document.getElementById('backToCategoriesBtn')?.addEventListener('click', volverACategorias);
 }
 
+
 // ===================================
 // NAVEGACIÓN
 // ===================================
+function toggleMenu() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    
+    if (sidebar && overlay) {
+        sidebar.classList.toggle('active');
+        overlay.classList.toggle('active');
+    }
+}
+
 function navegarSeccion(seccion) {
     // Actualizar nav items
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -949,14 +975,20 @@ function exportarCSV(tipo) {
 // ===================================
 
 function handleImageUpload(event) {
+    console.log('handleImageUpload called', event);
+    
     const file = event.target.files[0];
     
     if (!file) {
+        console.log('No file selected');
         return;
     }
     
+    console.log('File selected:', file.name, 'Type:', file.type, 'Size:', file.size);
+    
     // Validar que sea imagen
     if (!file.type.startsWith('image/')) {
+        console.error('Invalid file type:', file.type);
         mostrarToast('error', 'Archivo inválido', 'Por favor selecciona una imagen');
         return;
     }
@@ -964,35 +996,85 @@ function handleImageUpload(event) {
     // Validar tamaño (máximo 5MB)
     const maxSize = 5 * 1024 * 1024; // 5MB
     if (file.size > maxSize) {
+        console.error('File too large:', file.size);
         mostrarToast('error', 'Archivo muy grande', 'La imagen debe ser menor a 5MB');
         return;
     }
     
+    console.log('Starting file read...');
+    
     // Convertir a base64
     const reader = new FileReader();
+    
+    reader.onloadstart = function() {
+        console.log('FileReader: Load started');
+    };
+    
+    reader.onprogress = function(e) {
+        if (e.lengthComputable) {
+            const percentLoaded = Math.round((e.loaded / e.total) * 100);
+            console.log('FileReader: Progress', percentLoaded + '%');
+        }
+    };
+    
     reader.onload = function(e) {
+        console.log('FileReader: Load complete');
         const base64Image = e.target.result;
         
-        // Guardar en el campo
-        document.getElementById('productImage').value = base64Image;
+        console.log('Base64 length:', base64Image.length);
         
-        // Mostrar preview
-        const preview = document.getElementById('imagePreview');
-        const previewImg = document.getElementById('previewImg');
-        previewImg.src = base64Image;
-        preview.style.display = 'block';
-        
-        // Mostrar botón de quitar
-        document.getElementById('clearImageBtn').style.display = 'inline-flex';
-        
-        mostrarToast('success', 'Imagen cargada', 'La foto se ha cargado correctamente');
+        try {
+            // Guardar en el campo
+            const imageField = document.getElementById('productImage');
+            if (imageField) {
+                imageField.value = base64Image;
+                console.log('Image saved to productImage field');
+            } else {
+                console.error('productImage field not found');
+            }
+            
+            // Mostrar preview
+            const preview = document.getElementById('imagePreview');
+            const previewImg = document.getElementById('previewImg');
+            
+            if (preview && previewImg) {
+                previewImg.src = base64Image;
+                preview.style.display = 'block';
+                console.log('Preview displayed');
+            } else {
+                console.error('Preview elements not found');
+            }
+            
+            // Mostrar botón de quitar
+            const clearBtn = document.getElementById('clearImageBtn');
+            if (clearBtn) {
+                clearBtn.style.display = 'inline-flex';
+                console.log('Clear button shown');
+            }
+            
+            mostrarToast('success', 'Imagen cargada', 'La foto se ha cargado correctamente');
+        } catch (error) {
+            console.error('Error in image processing:', error);
+            mostrarToast('error', 'Error', 'Hubo un error al procesar la imagen');
+        }
     };
     
-    reader.onerror = function() {
-        mostrarToast('error', 'Error al cargar', 'No se pudo cargar la imagen');
+    reader.onerror = function(error) {
+        console.error('FileReader error:', error);
+        console.error('Error details:', reader.error);
+        mostrarToast('error', 'Error al cargar', 'No se pudo cargar la imagen. Intenta de nuevo.');
     };
     
-    reader.readAsDataURL(file);
+    reader.onabort = function() {
+        console.warn('FileReader: Read aborted');
+    };
+    
+    try {
+        reader.readAsDataURL(file);
+    } catch (error) {
+        console.error('Error calling readAsDataURL:', error);
+        mostrarToast('error', 'Error', 'No se pudo iniciar la lectura de la imagen');
+    }
     
     // Limpiar el input para permitir seleccionar la misma imagen nuevamente
     event.target.value = '';
